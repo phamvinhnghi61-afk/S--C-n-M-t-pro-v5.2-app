@@ -1,4 +1,4 @@
-name: Build APK from Single index.html
+name: Build APK from Single HTML
 
 on:
   push:
@@ -24,32 +24,26 @@ jobs:
           distribution: 'temurin'
           java-version: '21'
 
-      - name: Extract Embedded Logo & Prepare Web Assets
+      - name: Prepare HTML and Extract Embedded Icon
         run: |
           mkdir -p www assets
-          cp index.html www/index.html
-          python3 -c '
-          import re, base64
-          html = open("index.html", encoding="utf-8").read()
-          m = re.search(r"name=\"app-icon-base64\"\s+content=\"([^\"]+)\"", html)
-          if not m:
-              raise SystemExit("Khong tim thay du lieu icon trong index.html")
-          open("assets/icon.png", "wb").write(base64.b64decode(m.group(1)))
-          print("Da trich xuat thanh cong assets/icon.png")
-          '
+          HTML_FILE=$(find . -maxdepth 2 -name "*.html" ! -path "./www/*" | head -n 1)
+          if [ -z "$HTML_FILE" ]; then echo "Khong tim thay file .html nao trong kho!"; exit 1; fi
+          cp "$HTML_FILE" www/index.html
+          echo "Da nap file: $HTML_FILE"
+          python3 -c 'import re,base64; h=open("www/index.html",encoding="utf-8").read(); m=re.search(r"app-icon-base64\"[^>]*content=\"([^\"]+)\"",h); open("assets/icon.png","wb").write(base64.b64decode(m.group(1))) if m else exit("Khong tim thay du lieu icon trong HTML")'
 
-      - name: Initialize Capacitor & Embed Android Icon
+      - name: Initialize Capacitor and Embed Android Icon
         run: |
           npm init -y
           npm install @capacitor/core@6 @capacitor/cli@6 @capacitor/android@6
           npx cap init "So Can Mit Pro" "vn.io.linhkienpinthapmuoi.socanmit" --web-dir=www
           npx cap add android
-
           RES_DIR="android/app/src/main/res"
           rm -rf "$RES_DIR/mipmap-anydpi-v26"
-          for SIZE_DIR in "48x48:mipmap-mdpi" "72x72:mipmap-hdpi" "96x96:mipmap-xhdpi" "144x144:mipmap-xxhdpi" "192x192:mipmap-xxxhdpi"; do
-            SIZE="${SIZE_DIR%%:*}"
-            DIR="${SIZE_DIR##*:}"
+          for PAIR in "48x48:mipmap-mdpi" "72x72:mipmap-hdpi" "96x96:mipmap-xhdpi" "144x144:mipmap-xxhdpi" "192x192:mipmap-xxxhdpi"; do
+            SIZE="${PAIR%%:*}"
+            DIR="${PAIR##*:}"
             mkdir -p "$RES_DIR/$DIR"
             convert assets/icon.png -resize "$SIZE" "$RES_DIR/$DIR/ic_launcher.png"
             convert assets/icon.png -resize "$SIZE" "$RES_DIR/$DIR/ic_launcher_round.png"
