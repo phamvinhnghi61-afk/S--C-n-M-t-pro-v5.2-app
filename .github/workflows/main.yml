@@ -24,30 +24,23 @@ jobs:
           distribution: 'temurin'
           java-version: '21'
 
-      - name: Prepare HTML and Extract Embedded Icon
+      - name: Prepare HTML and Extract Icon
         run: |
           mkdir -p www assets
           HTML_FILE=$(find . -maxdepth 2 -name "*.html" ! -path "./www/*" | head -n 1)
-          if [ -z "$HTML_FILE" ]; then echo "Khong tim thay file .html nao trong kho!"; exit 1; fi
+          if [ -z "$HTML_FILE" ]; then echo "Khong tim thay file .html nao!"; exit 1; fi
           cp "$HTML_FILE" www/index.html
           echo "Da nap file: $HTML_FILE"
-          python3 -c 'import re,base64; h=open("www/index.html",encoding="utf-8").read(); m=re.search(r"app-icon-base64\"[^>]*content=\"([^\"]+)\"",h); open("assets/icon.png","wb").write(base64.b64decode(m.group(1))) if m else exit("Khong tim thay du lieu icon trong HTML")'
+          python3 -m pip install --quiet pillow
+          python3 -c 'import re,base64,io; from PIL import Image; h=open("www/index.html",encoding="utf-8").read(); m=re.search(r"app-icon-base64\"[^>]*content=\"([^\"]+)\"",h); img=Image.open(io.BytesIO(base64.b64decode(m.group(1)))).convert("RGBA") if m else Image.new("RGBA",(512,512),(12,90,48,255)); img.save("assets/icon.png"); print("Da tao assets/icon.png thanh cong")'
 
-      - name: Initialize Capacitor and Embed Android Icon
+      - name: Initialize Capacitor and Embed Android Icons
         run: |
           npm init -y
           npm install @capacitor/core@6 @capacitor/cli@6 @capacitor/android@6
           npx cap init "So Can Mit Pro" "vn.io.linhkienpinthapmuoi.socanmit" --web-dir=www
           npx cap add android
-          RES_DIR="android/app/src/main/res"
-          rm -rf "$RES_DIR/mipmap-anydpi-v26"
-          for PAIR in "48x48:mipmap-mdpi" "72x72:mipmap-hdpi" "96x96:mipmap-xhdpi" "144x144:mipmap-xxhdpi" "192x192:mipmap-xxxhdpi"; do
-            SIZE="${PAIR%%:*}"
-            DIR="${PAIR##*:}"
-            mkdir -p "$RES_DIR/$DIR"
-            convert assets/icon.png -resize "$SIZE" "$RES_DIR/$DIR/ic_launcher.png"
-            convert assets/icon.png -resize "$SIZE" "$RES_DIR/$DIR/ic_launcher_round.png"
-          done
+          python3 -c 'import os; from PIL import Image; res="android/app/src/main/res"; import shutil; shutil.rmtree(res+"/mipmap-anydpi-v26",ignore_errors=True); img=Image.open("assets/icon.png"); [os.makedirs(f"{res}/{d}",exist_ok=True) or img.resize((s,s)).save(f"{res}/{d}/ic_launcher.png") or img.resize((s,s)).save(f"{res}/{d}/ic_launcher_round.png") for s,d in [(48,"mipmap-mdpi"),(72,"mipmap-hdpi"),(96,"mipmap-xhdpi"),(144,"mipmap-xxhdpi"),(192,"mipmap-xxxhdpi")]]'
           npx cap sync android
 
       - name: Build Debug APK
